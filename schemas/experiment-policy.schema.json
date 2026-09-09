@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-investment-lab.local/schemas/experiment-policy.schema.json",
+  "title": "AI Investment Lab experiment policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_version",
+    "status",
+    "defined_at",
+    "experiment",
+    "benchmark",
+    "market_data",
+    "strategy",
+    "execution",
+    "universe",
+    "portfolio_limits",
+    "reporting",
+    "integrity"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "policy_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "status": { "enum": ["prelaunch", "active", "completed"] },
+    "defined_at": { "type": "string", "format": "date" },
+    "experiment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "planned_start_month", "day_zero_at", "duration_months", "base_currency", "starting_capital", "real_money"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "planned_start_month": { "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$" },
+        "day_zero_at": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "format": "date-time" }
+          ]
+        },
+        "duration_months": { "type": "integer", "minimum": 1 },
+        "base_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "starting_capital": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "real_money": { "type": "boolean", "const": false }
+      }
+    },
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "index", "ticker", "provider_symbol", "exchange", "mic", "isin", "trading_currency", "allocation_fraction", "fractional_shares", "cost_model"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "index": { "type": "string", "minLength": 1 },
+        "ticker": { "type": "string", "minLength": 1 },
+        "provider_symbol": { "type": "string", "minLength": 1 },
+        "exchange": { "type": "string", "minLength": 1 },
+        "mic": { "type": "string", "pattern": "^[A-Z0-9]{4}$" },
+        "isin": { "type": "string", "pattern": "^[A-Z]{2}[A-Z0-9]{9}[0-9]$" },
+        "trading_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "allocation_fraction": { "$ref": "#/$defs/unitDecimal" },
+        "fractional_shares": { "type": "boolean" },
+        "cost_model": { "const": "same_as_portfolio" }
+      }
+    },
+    "market_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary_provider", "frequency", "price_mode_for_execution", "price_mode_for_analytics", "fx_source", "risk_free_rate_source", "fallback_provider"],
+      "properties": {
+        "primary_provider": { "type": "string", "minLength": 1 },
+        "frequency": { "const": "end_of_day" },
+        "price_mode_for_execution": { "const": "raw" },
+        "price_mode_for_analytics": { "const": "corporate_action_aware" },
+        "fx_source": { "type": "string", "minLength": 1 },
+        "risk_free_rate_source": { "type": "string", "minLength": 1 },
+        "fallback_provider": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1 }
+          ]
+        }
+      }
+    },
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "style", "long_only", "typical_holding_period_months", "target_holdings", "systematic_market_timing"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "style": { "const": "QARP" },
+        "long_only": { "const": true },
+        "typical_holding_period_months": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum", "maximum"],
+          "properties": {
+            "minimum": { "type": "integer", "minimum": 1 },
+            "maximum": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "target_holdings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum", "maximum"],
+          "properties": {
+            "minimum": { "type": "integer", "minimum": 1 },
+            "maximum": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "systematic_market_timing": { "const": false }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["price", "fractional_shares", "commission_rate", "minimum_commission_eur", "slippage_rate", "fx_fee_rate", "sell_proceeds_settlement"],
+      "properties": {
+        "price": { "type": "string", "minLength": 1 },
+        "fractional_shares": { "type": "boolean" },
+        "commission_rate": { "$ref": "#/$defs/unitDecimal" },
+        "minimum_commission_eur": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "slippage_rate": { "$ref": "#/$defs/unitDecimal" },
+        "fx_fee_rate": { "$ref": "#/$defs/unitDecimal" },
+        "sell_proceeds_settlement": { "type": "string", "minLength": 1 }
+      }
+    },
+    "universe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed", "prohibited", "minimum_market_cap_eur", "minimum_20_day_median_value_traded_eur"],
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["PUBLIC_EQUITY", "UCITS_ETF", "CASH"] }
+        },
+        "prohibited": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "minimum_market_cap_eur": { "$ref": "#/$defs/nonNegativeDecimal" },
+        "minimum_20_day_median_value_traded_eur": { "$ref": "#/$defs/nonNegativeDecimal" }
+      }
+    },
+    "portfolio_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_cash_fraction", "maximum_position_fraction_at_trade", "maximum_sector_fraction_at_trade", "minimum_new_position_fraction", "maximum_holdings", "maximum_monthly_gross_turnover_fraction", "initial_construction_exempt_from_turnover_limit"],
+      "properties": {
+        "minimum_cash_fraction": { "$ref": "#/$defs/unitDecimal" },
+        "maximum_position_fraction_at_trade": { "$ref": "#/$defs/unitDecimal" },
+        "maximum_sector_fraction_at_trade": { "$ref": "#/$defs/unitDecimal" },
+        "minimum_new_position_fraction": { "$ref": "#/$defs/unitDecimal" },
+        "maximum_holdings": { "type": "integer", "minimum": 1 },
+        "maximum_monthly_gross_turnover_fraction": { "$ref": "#/$defs/unitDecimal" },
+        "initial_construction_exempt_from_turnover_limit": { "const": true }
+      }
+    },
+    "reporting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["valuation_frequency", "annualization_factor", "primary_metric", "minimum_track_record_days_for_annualized_metrics", "confidence_levels"],
+      "properties": {
+        "valuation_frequency": { "const": "daily" },
+        "annualization_factor": { "type": "integer", "minimum": 1 },
+        "primary_metric": { "const": "net_excess_total_return" },
+        "minimum_track_record_days_for_annualized_metrics": { "type": "integer", "minimum": 2 },
+        "confidence_levels": {
+          "type": "array",
+          "const": ["LOW", "MEDIUM", "HIGH"]
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decisions_are_append_only", "decision_required_before_trade", "store_source_as_known_at", "store_model_and_parameters", "hash_sealed_records", "allow_historical_overwrite"],
+      "properties": {
+        "decisions_are_append_only": { "const": true },
+        "decision_required_before_trade": { "const": true },
+        "store_source_as_known_at": { "const": true },
+        "store_model_and_parameters": { "const": true },
+        "hash_sealed_records": { "const": true },
+        "allow_historical_overwrite": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "nonNegativeDecimal": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "unitDecimal": {
+      "type": "string",
+      "pattern": "^(0(\\.[0-9]+)?|1(\\.0+)?)$"
+    }
+  }
+}

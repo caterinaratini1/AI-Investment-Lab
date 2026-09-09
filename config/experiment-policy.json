@@ -1,0 +1,100 @@
+{
+  "$schema": "../schemas/experiment-policy.schema.json",
+  "schema_version": 1,
+  "policy_version": "0.1.0",
+  "status": "prelaunch",
+  "defined_at": "2026-09-10",
+  "experiment": {
+    "name": "AI Investment Lab — Initial Experiment",
+    "planned_start_month": "2026-09",
+    "day_zero_at": null,
+    "duration_months": 12,
+    "base_currency": "EUR",
+    "starting_capital": "10000.00",
+    "real_money": false
+  },
+  "benchmark": {
+    "name": "iShares Core MSCI World UCITS ETF USD (Acc)",
+    "index": "MSCI World Index",
+    "ticker": "IWDA",
+    "provider_symbol": "IWDA.AS",
+    "exchange": "Euronext Amsterdam",
+    "mic": "XAMS",
+    "isin": "IE00B4L5Y983",
+    "trading_currency": "EUR",
+    "allocation_fraction": "1.00",
+    "fractional_shares": true,
+    "cost_model": "same_as_portfolio"
+  },
+  "market_data": {
+    "primary_provider": "EODHD",
+    "frequency": "end_of_day",
+    "price_mode_for_execution": "raw",
+    "price_mode_for_analytics": "corporate_action_aware",
+    "fx_source": "EODHD",
+    "risk_free_rate_source": "ECB euro short-term rate (€STR)",
+    "fallback_provider": null
+  },
+  "strategy": {
+    "name": "Benchmark-aware quality at a reasonable price",
+    "style": "QARP",
+    "long_only": true,
+    "typical_holding_period_months": {
+      "minimum": 6,
+      "maximum": 24
+    },
+    "target_holdings": {
+      "minimum": 8,
+      "maximum": 15
+    },
+    "systematic_market_timing": false
+  },
+  "execution": {
+    "price": "first regular-session open strictly after decision sealing",
+    "fractional_shares": true,
+    "commission_rate": "0.0010",
+    "minimum_commission_eur": "1.00",
+    "slippage_rate": "0.0005",
+    "fx_fee_rate": "0.0020",
+    "sell_proceeds_settlement": "immediate for paper accounting"
+  },
+  "universe": {
+    "allowed": ["PUBLIC_EQUITY", "UCITS_ETF", "CASH"],
+    "prohibited": [
+      "LEVERAGE",
+      "MARGIN",
+      "SHORT_SELLING",
+      "CFD",
+      "OPTION",
+      "FUTURE",
+      "CRYPTOCURRENCY",
+      "PRIVATE_SECURITY"
+    ],
+    "minimum_market_cap_eur": "1000000000",
+    "minimum_20_day_median_value_traded_eur": "5000000"
+  },
+  "portfolio_limits": {
+    "minimum_cash_fraction": "0.05",
+    "maximum_position_fraction_at_trade": "0.15",
+    "maximum_sector_fraction_at_trade": "0.30",
+    "minimum_new_position_fraction": "0.02",
+    "maximum_holdings": 20,
+    "maximum_monthly_gross_turnover_fraction": "0.25",
+    "initial_construction_exempt_from_turnover_limit": true
+  },
+  "reporting": {
+    "valuation_frequency": "daily",
+    "annualization_factor": 252,
+    "primary_metric": "net_excess_total_return",
+    "minimum_track_record_days_for_annualized_metrics": 60,
+    "confidence_levels": ["LOW", "MEDIUM", "HIGH"]
+  },
+  "integrity": {
+    "decisions_are_append_only": true,
+    "decision_required_before_trade": true,
+    "store_source_as_known_at": true,
+    "store_model_and_parameters": true,
+    "hash_sealed_records": true,
+    "allow_historical_overwrite": false
+  }
+}
