@@ -1,0 +1,20 @@
+{
+  "name": "ai-investment-lab",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=24 <27"
+  },
+  "devDependencies": {
+    "eslint": "10.9.1"
+  },
+  "scripts": {
+    "dev:web": "npm run dev --workspace @ai-investment-lab/web",
+    "build:web": "npm run build --workspace @ai-investment-lab/web",
+    "lint:web": "npm run lint --workspace @ai-investment-lab/web",
+    "typecheck:web": "npm run typecheck --workspace @ai-investment-lab/web"
+  }
+}

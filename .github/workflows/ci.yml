@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python and PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.11-alpine
+        env:
+          POSTGRES_DB: ai_investment_lab
+          POSTGRES_USER: ai_lab
+          POSTGRES_PASSWORD: ai_lab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ai_lab -d ai_investment_lab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AIL_DATABASE_URL: postgresql+psycopg://ai_lab:ai_lab@localhost:5432/ai_investment_lab
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            requirements-lock.txt
+            requirements-runtime-lock.txt
+            apps/api/pyproject.toml
+            packages/db/pyproject.toml
+            packages/domain/pyproject.toml
+      - name: Install Python environment
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements-dev.txt
+      - name: Lint and format check
+        run: ruff check . && ruff format --check .
+      - name: Static type check
+        run: mypy apps/api/src packages/db/src packages/domain/src
+      - name: Test accounting, persistence, and API
+        run: pytest
+      - name: Verify PostgreSQL migration lifecycle and schema parity
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
+          alembic upgrade head
+
+  web:
+    name: Next.js
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install locked web dependencies
+        run: npm ci
+      - name: Lint, type-check, and build
+        run: npm run lint:web && npm run typecheck:web && npm run build:web

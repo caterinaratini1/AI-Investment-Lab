@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-investment-lab-domain"
+version = "0.1.0"
+description = "Exact-decimal portfolio accounting domain for AI Investment Lab"
+requires-python = ">=3.13"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ai_investment_lab.domain*"]
+namespaces = true

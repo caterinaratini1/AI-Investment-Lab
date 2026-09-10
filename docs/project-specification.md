@@ -117,7 +117,7 @@ Autonomous model research, autonomous execution, multi-agent committees, real-mo
 
 ## 7. Acceptance criteria by milestone
 
-- **Portfolio engine:** invariant-driven unit tests cover buys, partial/full sells, fractional shares, fees, FX, dividends, splits, oversells, and insufficient cash.
+- **Portfolio engine:** invariant-driven unit tests cover buys, partial/full sells, fractional shares, fees, FX, oversells, insufficient cash, and valuation. Dividend and split accounting is accepted with Phase 2, when point-in-time corporate-action inputs exist.
 - **Market data:** daily jobs are idempotent, freshness is visible, and missing/changed data enters an exception workflow.
 - **Dashboard:** a reader can answer what is owned, why, and whether it beat the benchmark without documentation.
 - **Decision system:** every trade has one prior sealed decision and historical records cannot be updated through application roles.

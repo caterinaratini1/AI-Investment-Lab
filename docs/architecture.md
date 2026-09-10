@@ -80,16 +80,16 @@ Large licensed raw responses and evidence files belong in private object storage
 
 | Area | Choice |
 | --- | --- |
-| Web | current stable Next.js App Router, React, and TypeScript at Phase 3 initialization |
-| API | current stable Python and FastAPI at Phase 1 initialization |
-| Persistence | PostgreSQL with SQLAlchemy and Alembic |
+| Web | Next.js 16 App Router, React 19, and TypeScript 5.9; shell initialized in Phase 1 |
+| API | Python 3.13, FastAPI 0.141, and Pydantic 2.13 |
+| Persistence | PostgreSQL 17 with SQLAlchemy 2.0 and Alembic 1.19 |
 | Numeric model | Python `Decimal` and PostgreSQL `numeric` with explicit scale |
 | Jobs | Render cron runs idempotent Python commands; PostgreSQL records runs; no queue/broker until continuous workflows require one |
 | Local environment | Docker Compose for PostgreSQL; apps runnable directly for fast iteration |
 | Testing | Pytest for Python, Vitest for web units, and Playwright for critical end-to-end flows |
 | CI | GitHub Actions: lint, type-check, tests, schema validation, generated-client drift, and migration checks |
 
-Exact dependency versions are deferred until their implementation phase so Phase 0 does not freeze already-stale packages.
+Phase 1 direct and transitive dependencies are version-locked in the npm and Python lock manifests. Later-phase dependencies are selected and locked only when their components are implemented.
 
 ## 7. Environments and delivery
 
@@ -104,4 +104,4 @@ Supabase database backups do not include Storage objects, so the production runb
 
 ## 8. Phase boundaries
 
-Phase 1 creates `apps/api`, `packages/domain`, `packages/db`, migrations, and accounting tests. Phase 2 adds provider adapters and the worker. Phase 3 creates `apps/web` and generates the client. This ordering keeps the user interface downstream of tested accounting contracts.
+Phase 1 creates `apps/api`, `packages/domain`, `packages/db`, migrations, accounting tests, and the minimal `apps/web` shell required by the original brief. Phase 2 adds provider adapters and the worker. Phase 3 turns the shell into the data-backed dashboard and generates its API client. This ordering keeps authoritative financial behavior downstream of tested accounting contracts while proving the web toolchain early.

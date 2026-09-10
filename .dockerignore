@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+**/__pycache__
+**/*.egg-info
+**/node_modules
+apps/web
+data
+docs
+evidence
+tests
+.env
+.env.*
+*.log

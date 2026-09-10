@@ -48,6 +48,18 @@ Phase 0 documentation:
 - [`docs/decisions/0001-phase-zero-baseline.md`](docs/decisions/0001-phase-zero-baseline.md) — architectural decision record
 - [`rationale.md`](rationale.md) — comparisons and rationale for every major experimental and technical choice
 
+## Phase 1
+
+- [x] Initialize the Next.js and FastAPI applications
+- [x] Configure PostgreSQL, SQLAlchemy, and Alembic
+- [x] Model portfolios, assets, positions, transactions, and cash-ledger entries
+- [x] Implement BUY and SELL accounting with costs and FX
+- [x] Calculate cash, moving average cost, realized P&L, and unrealized P&L
+- [x] Protect transaction and cash history with append-only database triggers
+- [x] Test the domain, repository, API, migration lifecycle, and production web build
+
+The implementation contract, API routes, local setup, tests, and deliberate phase boundaries are documented in [`docs/phase-1.md`](docs/phase-1.md).
+
 ## Guiding principles
 
 1. **No hindsight.** A decision is sealed before its execution price exists.
@@ -73,7 +85,7 @@ Phase 0 documentation:
 | 9 — Automation | Reviews, monitoring, and scheduled reporting |
 | 10 — Public experiment | Independently inspectable experiment |
 
-## Planned stack
+## Implementation stack
 
 - Next.js and TypeScript for the web application
 - FastAPI and Python for APIs, accounting, and analytics
@@ -82,11 +94,11 @@ Phase 0 documentation:
 - Docker for local development; GitHub Actions for automated checks
 - Vercel for the web app, Render for API/jobs, and Supabase for PostgreSQL and private evidence storage
 
-Implementation begins in Phase 1. See the [architecture document](docs/architecture.md) for the intended monorepo layout.
+The Phase 1 foundation is implemented as a modular monorepo. See the [architecture document](docs/architecture.md) for boundaries and the [project rationale](rationale.md) for the alternatives considered.
 
 ## Status
 
-Phase 0 is complete. The experiment has **not** started: no Day Zero timestamp, model version, initial portfolio, or market-condition snapshot has been sealed yet.
+Phases 0 and 1 are complete. The experiment has **not** started: no Day Zero timestamp, model version, initial portfolio, or market-condition snapshot has been sealed yet. Phase 2 adds point-in-time market data and daily valuation.
 
 ## License
 

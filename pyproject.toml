@@ -1,0 +1,48 @@
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers --cov=ai_investment_lab --cov-report=term-missing --cov-fail-under=90"
+testpaths = ["tests"]
+pythonpath = [
+  "apps/api/src",
+  "packages/db/src",
+  "packages/domain/src"
+]
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError"
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = [
+  "apps/api/src",
+  "packages/db/src",
+  "packages/domain/src",
+  "tests"
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+explicit_package_bases = true
+plugins = ["pydantic.mypy"]
+mypy_path = [
+  "apps/api/src",
+  "packages/db/src",
+  "packages/domain/src"
+]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false

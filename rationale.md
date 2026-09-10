@@ -1,6 +1,6 @@
 # Rationale for major project choices
 
-- Status: Phase 0 baseline
+- Status: Phase 0 baseline plus Phase 1 implementation record
 - Decision date: 10 September 2026
 - Policy version: `0.1.0`
 
@@ -28,10 +28,12 @@ The choices are evaluated against six priorities, in order:
 | Execution | First regular-session open strictly after a decision is sealed |
 | Costs | 10 bps commission with EUR 1 minimum, 5 bps adverse slippage, 20 bps non-EUR FX fee |
 | Market data | EODHD worldwide end-of-day data; ECB for €STR |
+| Accounting | Moving weighted-average cost in EUR; exact decimals; round-half-even at monetary boundaries |
 | Frontend | TypeScript, React, Next.js App Router |
 | Backend | Python, FastAPI, Pydantic |
 | Database | PostgreSQL, hosted initially by Supabase |
 | Persistence | SQLAlchemy and Alembic; exact `numeric`/`Decimal` arithmetic |
+| Runtime baseline | Node.js 24 LTS for CI/deployment; Python 3.13; PostgreSQL 17.11 |
 | Jobs | Same Python codebase run as Render cron jobs; background worker when continuous workflows arrive |
 | Hosting | Vercel for web; Render for API/jobs; Supabase for database/private evidence |
 | Architecture | Modular monolith in a monorepo with provider adapters |
@@ -366,7 +368,7 @@ FastAPI already emits OpenAPI from validated Pydantic models. Generating a TypeS
 
 ### Choice
 
-- Pytest for deterministic domain, property/invariant, repository, migration, and API tests.
+- Pytest for deterministic domain invariants, repository, migration, and API tests; property-based tests when the corporate-action state space arrives.
 - Vitest and Testing Library for frontend behavior.
 - Playwright for a small set of critical browser flows.
 - Synthetic, reviewed market-data fixtures in CI; never live provider responses.
@@ -406,9 +408,9 @@ Market data, issuer documents, and model/provider outputs remain governed by the
 
 ## 24. Decisions intentionally not frozen yet
 
-Some choices would be false precision in Phase 0 and are explicitly deferred:
+Some choices would still be false precision and are explicitly deferred:
 
-- exact dependency versions, selected when each implementation phase begins and then locked;
+- exact dependency versions for components not yet implemented; Phase 1 versions are now locked;
 - exact Day Zero timestamp and experiment end timestamp;
 - AI provider/model/version and generation settings;
 - initial securities and their weights;
@@ -418,7 +420,58 @@ Some choices would be false precision in Phase 0 and are explicitly deferred:
 
 Deferral is not omission: each item has a trigger and must receive its own append-only decision record before it affects the experiment.
 
-## 25. Change rule
+## 25. Phase 1 runtime and dependency baseline
+
+### Options considered
+
+| Decision | Alternatives | Selection reason |
+| --- | --- | --- |
+| Python 3.13 | 3.12 has a longer compatibility history; 3.14 is newer | 3.13 has mature binary support for the selected data stack, current language features, and matches the container/local baseline without making a newly released interpreter part of the accounting risk |
+| Node.js 24 for CI | Node 22 is older LTS; Node 26 is Current rather than the deployment baseline | Node 24 is the stable LTS line for reproducible CI and hosting; the local engine range also permits Node 26 so contributors are not forced backward |
+| PostgreSQL 17.11 | PostgreSQL 16 is older; 18.6 is newest | 17.11 is a supported, patched major with the familiar pre-18 official-container data layout and no missing feature needed by this small ledger |
+| Current stable application libraries | Broad version ranges or unpinned `latest` | Exact direct versions plus resolved lock manifests make a checkout rebuild the reviewed environment instead of silently changing behavior |
+
+Phase 1 freezes Next.js 16.3.4, React 19.3.0, TypeScript 5.9.3, ESLint 10.9.1, FastAPI 0.141.1, Pydantic 2.13.5, SQLAlchemy 2.0.52, Alembic 1.19.2, and psycopg 3.3.5. npm transitive dependencies live in `package-lock.json`; Python's resolved production and development environments live in `requirements-runtime-lock.txt` and `requirements-lock.txt`, while each package manifest retains its direct runtime contract. PostgreSQL 17.11 is pinned in local Compose and CI. The [PostgreSQL release archive](https://www.postgresql.org/docs/release/) and [official container tags](https://hub.docker.com/_/postgres/tags?name=17.11-alpine) provide the upstream version record.
+
+This is the best reproducibility/maintenance balance for Day Zero preparation. Locking prevents accidental drift; updating remains possible through an explicit reviewed change with all quality gates rerun. Container digests are not frozen yet because development must receive compatible security rebuilds of the same PostgreSQL patch tag; production deployment will record its immutable image digest.
+
+## 26. Moving weighted-average cost rather than FIFO or specific lots
+
+### Options considered
+
+| Method | Strength | Weakness here |
+| --- | --- | --- |
+| FIFO lots | Familiar tax/accounting convention and retains lot history | Realized P&L depends on an investor jurisdiction the experiment does not model |
+| Specific identification | Can mirror a chosen broker lot | Introduces a discretionary lot-selection decision that can manufacture favorable realized outcomes |
+| Moving weighted average | Deterministic, order-independent within each purchase batch, and natural for fractional paper positions | Does not reproduce every broker's tax statement |
+
+Moving weighted-average EUR cost is best because this is a performance experiment, not a tax simulation. Every BUY adds gross modeled notional, commission, and FX fee to basis. A partial SELL removes the same fraction of basis as quantity, so selecting a favorable historical lot cannot alter the reported result. The full transaction chronology remains append-only, leaving future lot analytics possible without changing the frozen headline method.
+
+## 27. Append-only events with transactional projections
+
+The main alternatives were (a) recompute all state from the complete ledger on every request, (b) store only mutable balances and positions, or (c) keep immutable events plus mutable projections. Full replay is elegant but unnecessarily expensive and makes concurrency harder at the HTTP boundary. Mutable balances alone are fast but cannot independently explain themselves.
+
+Phase 1 therefore stores every execution and cash movement as append-only history while maintaining portfolio and position projections in the same database transaction. PostgreSQL row locks serialize competing commands for a portfolio. A failed command rolls back the event, cash entry, and projections together. Database triggers reject UPDATE and DELETE on transactions and cash-ledger rows even if a future route is implemented incorrectly.
+
+This hybrid is strongest for the experiment: reads remain simple, but cash and positions can be reconciled or rebuilt from economic events. It is deliberately not called full event sourcing—there is no event bus, generic aggregate framework, or replay infrastructure that Phase 1 does not need.
+
+## 28. Decimal precision and rounding boundaries
+
+The alternatives were binary floating point, arbitrary unbounded decimals, or fixed-precision decimals. Floating point is fast but unsuitable for equality-based cash reconciliation. Unbounded decimals postpone rather than resolve how an execution becomes cents and can let API, Python, and PostgreSQL disagree.
+
+Inputs are validated at explicit scales: eight places for quantities/prices, twelve for rates, and two for money. Intermediate multiplication uses `Decimal`; calculated monetary postings round to cents with round-half-even. Round-half-up is more familiar for retail displays, but systematic upward tie-breaking creates a directional bias across repeated calculations. Round-half-even minimizes that aggregate bias and is consistently available in Python and PostgreSQL-compatible numeric workflows.
+
+The API rejects excess precision instead of silently truncating it. This makes upstream data normalization an observable responsibility and ensures that the stored execution is exactly the execution the caller reviewed.
+
+## 29. A narrow Phase 1 API and early web shell
+
+The engine could have remained a library until the dashboard phase, or Phase 1 could have built a complete CRUD interface. A library alone would leave transaction boundaries, validation, and serialization untested. A full UI would prematurely encode market-data and decision workflows that do not exist yet.
+
+The selected middle path exposes only health/readiness, portfolio and asset creation/read, position/transaction reads, and a fictional trade command. FastAPI owns validation and transaction orchestration; the pure domain package owns accounting. A minimal Next.js shell proves the requested frontend stack and production build without pretending that static placeholders are a portfolio dashboard.
+
+Caller-supplied price and optional `decision_id` are explicitly transitional. Phase 2 replaces manual prices with stored, time-eligible market observations; Phase 4 makes a prior sealed decision mandatory. The endpoint cannot be used for Day Zero until both controls exist. This boundary is better than inventing provenance because it keeps Phase 1 testable while making its limitations impossible to confuse with launch readiness.
+
+## 30. Change rule
 
 Before Day Zero, a major choice may be revised by updating this document, the relevant policy/specification, the machine-readable configuration when applicable, and the decision record in the same commit.
 
