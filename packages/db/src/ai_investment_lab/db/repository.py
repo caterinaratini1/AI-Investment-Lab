@@ -1,5 +1,6 @@
 """Transactional repository for portfolios and their append-only ledgers."""
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from ai_investment_lab.db.models import (
     AssetModel,
     CashLedgerEntryModel,
+    ListingModel,
     PortfolioModel,
     PositionModel,
     TransactionModel,
@@ -19,6 +21,22 @@ from ai_investment_lab.domain import CostModel, Portfolio, Position, TradeExecut
 
 class RecordNotFoundError(LookupError):
     """A requested persistence record does not exist."""
+
+
+@dataclass(frozen=True)
+class AssetRecord:
+    """Stable security identity paired with its primary tradable listing."""
+
+    asset: AssetModel
+    listing: ListingModel
+
+    @property
+    def id(self) -> UUID:
+        return self.asset.id
+
+    @property
+    def currency(self) -> str:
+        return self.listing.currency
 
 
 class PortfolioRepository:
@@ -80,25 +98,56 @@ class PortfolioRepository:
         currency: str,
         asset_type: str,
         sector: str | None = None,
-    ) -> AssetModel:
-        record = AssetModel(
+        provider: str = "EODHD",
+        provider_symbol: str | None = None,
+        provider_exchange_code: str | None = None,
+        exchange_timezone: str | None = None,
+    ) -> AssetRecord:
+        asset = AssetModel(
             name=name.strip(),
-            ticker=ticker.strip().upper(),
             isin=isin.strip().upper(),
-            exchange_mic=exchange_mic.strip().upper(),
-            currency=currency.strip().upper(),
             asset_type=asset_type,
             sector=sector.strip() if sector else None,
         )
-        self.session.add(record)
+        self.session.add(asset)
         self.session.flush()
-        return record
+        listing = ListingModel(
+            asset_id=asset.id,
+            ticker=ticker.strip().upper(),
+            exchange_mic=exchange_mic.strip().upper(),
+            currency=currency.strip().upper(),
+            provider=provider.strip().upper(),
+            provider_symbol=provider_symbol.strip().upper() if provider_symbol else None,
+            provider_exchange_code=(
+                provider_exchange_code.strip().upper() if provider_exchange_code else None
+            ),
+            exchange_timezone=exchange_timezone.strip() if exchange_timezone else None,
+            is_primary=True,
+        )
+        self.session.add(listing)
+        self.session.flush()
+        return AssetRecord(asset=asset, listing=listing)
 
-    def get_asset(self, asset_id: UUID) -> AssetModel:
-        record = self.session.get(AssetModel, asset_id)
-        if record is None:
+    def get_asset(self, asset_id: UUID) -> AssetRecord:
+        asset = self.session.get(AssetModel, asset_id)
+        if asset is None:
             raise RecordNotFoundError(f"asset {asset_id} was not found")
-        return record
+        listing = self.session.scalar(
+            select(ListingModel).where(
+                ListingModel.asset_id == asset_id,
+                ListingModel.is_primary.is_(True),
+                ListingModel.active.is_(True),
+            )
+        )
+        if listing is None:
+            raise RecordNotFoundError(f"asset {asset_id} has no active primary listing")
+        return AssetRecord(asset=asset, listing=listing)
+
+    def get_listing(self, listing_id: UUID) -> ListingModel:
+        listing = self.session.get(ListingModel, listing_id)
+        if listing is None:
+            raise RecordNotFoundError(f"listing {listing_id} was not found")
+        return listing
 
     def list_positions(self, portfolio_id: UUID) -> list[PositionModel]:
         self.get_portfolio(portfolio_id)

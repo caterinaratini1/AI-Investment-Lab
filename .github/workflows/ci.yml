@@ -42,6 +42,8 @@ jobs:
             requirements-lock.txt
             requirements-runtime-lock.txt
             apps/api/pyproject.toml
+            apps/worker/pyproject.toml
+            packages/data_providers/pyproject.toml
             packages/db/pyproject.toml
             packages/domain/pyproject.toml
       - name: Install Python environment
@@ -49,8 +51,8 @@ jobs:
       - name: Lint and format check
         run: ruff check . && ruff format --check .
       - name: Static type check
-        run: mypy apps/api/src packages/db/src packages/domain/src
-      - name: Test accounting, persistence, and API
+        run: mypy apps/api/src apps/worker/src packages/data_providers/src packages/db/src packages/domain/src
+      - name: Test accounting, market data, persistence, worker, and API
         run: pytest
       - name: Verify PostgreSQL migration lifecycle and schema parity
         run: |

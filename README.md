@@ -60,6 +60,19 @@ Phase 0 documentation:
 
 The implementation contract, API routes, local setup, tests, and deliberate phase boundaries are documented in [`docs/phase-1.md`](docs/phase-1.md).
 
+## Phase 2
+
+- [x] Add a provider-neutral EODHD adapter for ticker/name/ISIN lookup and historical EOD prices
+- [x] Separate stable assets from exchange listings and provider symbols
+- [x] Cache raw price, adjusted-close, FX, and exchange-session observations in PostgreSQL
+- [x] Preserve upstream corrections as append-only revisions with payload checksums
+- [x] Distinguish expected-session gaps from holidays and expose a data-quality queue
+- [x] Produce idempotent daily portfolio snapshots with exact input lineage and freshness
+- [x] Add operator/backfill commands and a scheduled Render daily job
+- [x] Test provider failures, invalid data, cache hits, corrections, holidays, FX, and snapshots
+
+The data contract, worker commands, schedule, exception workflow, API routes, and remaining Day Zero gates are documented in [`docs/phase-2.md`](docs/phase-2.md).
+
 ## Guiding principles
 
 1. **No hindsight.** A decision is sealed before its execution price exists.
@@ -94,11 +107,11 @@ The implementation contract, API routes, local setup, tests, and deliberate phas
 - Docker for local development; GitHub Actions for automated checks
 - Vercel for the web app, Render for API/jobs, and Supabase for PostgreSQL and private evidence storage
 
-The Phase 1 foundation is implemented as a modular monorepo. See the [architecture document](docs/architecture.md) for boundaries and the [project rationale](rationale.md) for the alternatives considered.
+The Phase 2 foundation is implemented as a modular monorepo. See the [architecture document](docs/architecture.md) for boundaries and the [project rationale](rationale.md) for the alternatives considered.
 
 ## Status
 
-Phases 0 and 1 are complete. The experiment has **not** started: no Day Zero timestamp, model version, initial portfolio, or market-condition snapshot has been sealed yet. Phase 2 adds point-in-time market data and daily valuation.
+Phases 0, 1, and the Phase 2 market-data milestone are complete. The experiment has **not** started: provider/public-display entitlement, corporate-action accounting, a Day Zero timestamp, model version, initial portfolio, and market-condition snapshot have not been sealed yet. Phase 3 builds the public dashboard on the stored snapshot API.
 
 ## License
 

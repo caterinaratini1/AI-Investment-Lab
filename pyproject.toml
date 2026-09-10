@@ -3,6 +3,8 @@ addopts = "--strict-config --strict-markers --cov=ai_investment_lab --cov-report
 testpaths = ["tests"]
 pythonpath = [
   "apps/api/src",
+  "apps/worker/src",
+  "packages/data_providers/src",
   "packages/db/src",
   "packages/domain/src"
 ]
@@ -21,6 +23,8 @@ target-version = "py313"
 line-length = 100
 src = [
   "apps/api/src",
+  "apps/worker/src",
+  "packages/data_providers/src",
   "packages/db/src",
   "packages/domain/src",
   "tests"
@@ -39,6 +43,8 @@ explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 mypy_path = [
   "apps/api/src",
+  "apps/worker/src",
+  "packages/data_providers/src",
   "packages/db/src",
   "packages/domain/src"
 ]

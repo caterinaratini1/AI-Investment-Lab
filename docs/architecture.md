@@ -89,7 +89,7 @@ Large licensed raw responses and evidence files belong in private object storage
 | Testing | Pytest for Python, Vitest for web units, and Playwright for critical end-to-end flows |
 | CI | GitHub Actions: lint, type-check, tests, schema validation, generated-client drift, and migration checks |
 
-Phase 1 direct and transitive dependencies are version-locked in the npm and Python lock manifests. Later-phase dependencies are selected and locked only when their components are implemented.
+Phase 2 direct and transitive dependencies are version-locked in the npm and Python lock manifests. Later-phase dependencies are selected and locked only when their components are implemented.
 
 ## 7. Environments and delivery
 
@@ -104,4 +104,4 @@ Supabase database backups do not include Storage objects, so the production runb
 
 ## 8. Phase boundaries
 
-Phase 1 creates `apps/api`, `packages/domain`, `packages/db`, migrations, accounting tests, and the minimal `apps/web` shell required by the original brief. Phase 2 adds provider adapters and the worker. Phase 3 turns the shell into the data-backed dashboard and generates its API client. This ordering keeps authoritative financial behavior downstream of tested accounting contracts while proving the web toolchain early.
+Phase 1 created `apps/api`, `packages/domain`, `packages/db`, migrations, accounting tests, and the minimal `apps/web` shell required by the original brief. Phase 2 adds `packages/data_providers`, `apps/worker`, versioned market-data persistence, daily snapshot APIs, and the Render schedule. Phase 3 turns the shell into the data-backed dashboard and generates its API client. This ordering keeps authoritative financial behavior downstream of tested accounting contracts while proving the web toolchain early.

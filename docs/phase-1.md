@@ -54,7 +54,8 @@ The fixed cost assumptions come from [`experiment-policy.json`](../config/experi
 | Table | Role | Mutation rule |
 | --- | --- | --- |
 | `portfolios` | Starting capital, cash, realized P&L, policy/version | Updated transactionally as a projection |
-| `assets` | Stable instrument/listing identity | Reference data; unique by listing identifiers |
+| `assets` | Stable instrument identity | Reference data; unique by ISIN |
+| `listings` | Exchange, currency, ticker, and provider identity | Added in Phase 2; one active primary listing drives accounting and valuation |
 | `positions` | Current quantity, cost basis, and realized P&L by asset | Rebuildable projection; removed after a full exit |
 | `transactions` | Full modeled execution and itemized costs | Append-only in PostgreSQL |
 | `cash_ledger_entries` | Initial capital and every trade cash movement | Append-only in PostgreSQL |
@@ -114,9 +115,9 @@ npm run build:web
 
 ## Deliberate boundaries
 
-- The trade endpoint accepts a caller-supplied reference price only as a Phase 1 verification interface. Phase 2 must derive eligible prices and FX observations from stored provider data.
+- The trade endpoint accepts a caller-supplied reference price only as a Phase 1 verification interface. Phase 2 stores eligible prices and FX observations; the decision/execution workflow must make them authoritative before Day Zero.
 - `decision_id` is temporarily optional because sealed decisions arrive in Phase 4. It must become required before Day Zero.
-- Dividends, splits, other corporate actions, market calendars, and daily snapshots depend on Phase 2 market data and are not silently simulated here.
+- Market calendars and daily snapshots are implemented in Phase 2. Corporate-action retrieval and split/dividend booking remain an explicit pre-Day-Zero gate and are not silently simulated.
 - Portfolio concentration, sector, minimum-cash policy, and turnover checks require a time-consistent valuation context and are added with the execution workflow before autonomous decisions.
 - SQLite is used only for fast deterministic repository/API tests. PostgreSQL is the production contract, and CI exercises the Alembic upgrade/check/downgrade lifecycle against PostgreSQL 17.11.
 

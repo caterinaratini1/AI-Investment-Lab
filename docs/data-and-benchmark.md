@@ -69,9 +69,9 @@ These sources do not become silent substitutes for missing prices. Every overrid
 
 ## 4. Ingestion contract
 
-Each observation stores provider, provider symbol, stable asset/listing IDs, exchange MIC, native currency, observation date/time, retrieval time, raw payload checksum, raw/adjusted flag, and ingestion-run ID.
+Each observation stores provider, provider symbol, stable asset/listing IDs, exchange MIC through the listing, native currency, observation date/time, retrieval time, raw close and adjusted close as distinct fields, the canonical raw-row payload and checksum, and ingestion-run ID.
 
-Ingestion must be idempotent on provider + listing + interval + observation time + data version. A corrected upstream value creates a new version and marks the former record superseded.
+Ingestion must be idempotent on provider + listing + interval + observation time + data version. A corrected upstream value creates a new revision whose `supersedes_id` links to the former record; the former row is never edited.
 
 Validation includes:
 

@@ -1,5 +1,6 @@
-"""Phase 1 portfolio, asset, and transaction endpoints."""
+"""Portfolio ledger and point-in-time market-data endpoints."""
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -9,19 +10,28 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ai_investment_lab.api.database import get_db_session
+from ai_investment_lab.api.providers import get_market_provider
 from ai_investment_lab.api.schemas import (
     AssetCreate,
     AssetResponse,
+    DataQualityIssueResponse,
     HealthResponse,
+    InstrumentMatchResponse,
     PortfolioCreate,
     PortfolioResponse,
+    PortfolioSnapshotResponse,
     PositionResponse,
+    PriceObservationResponse,
     ReadinessResponse,
+    SnapshotPositionResponse,
     TradeCreate,
     TradeResultResponse,
     TransactionResponse,
 )
+from ai_investment_lab.data_providers import MarketDataProvider, ProviderError
 from ai_investment_lab.db import PortfolioRepository, PositionModel, RecordNotFoundError
+from ai_investment_lab.db.market_repository import MarketDataRepository
+from ai_investment_lab.db.repository import AssetRecord
 from ai_investment_lab.domain import (
     DomainError,
     InsufficientCashError,
@@ -31,6 +41,7 @@ from ai_investment_lab.domain import (
 
 router = APIRouter()
 DbSession = Annotated[Session, Depends(get_db_session)]
+Provider = Annotated[MarketDataProvider, Depends(get_market_provider)]
 
 
 def _position_response(position: PositionModel) -> PositionResponse:
@@ -48,6 +59,25 @@ def _position_response(position: PositionModel) -> PositionResponse:
 
 def _not_found(error: RecordNotFoundError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
+
+
+def _asset_response(record: AssetRecord) -> AssetResponse:
+    return AssetResponse(
+        id=record.asset.id,
+        listing_id=record.listing.id,
+        name=record.asset.name,
+        ticker=record.listing.ticker,
+        isin=record.asset.isin,
+        exchange_mic=record.listing.exchange_mic,
+        currency=record.listing.currency,
+        asset_type=record.asset.asset_type,
+        sector=record.asset.sector,
+        provider=record.listing.provider,
+        provider_symbol=record.listing.provider_symbol,
+        provider_exchange_code=record.listing.provider_exchange_code,
+        exchange_timezone=record.listing.exchange_timezone,
+        created_at=record.asset.created_at,
+    )
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])
@@ -132,6 +162,9 @@ def create_asset(
                 currency=payload.currency,
                 asset_type=payload.asset_type.value,
                 sector=payload.sector,
+                provider_symbol=payload.provider_symbol,
+                provider_exchange_code=payload.provider_exchange_code,
+                exchange_timezone=payload.exchange_timezone,
             )
     except IntegrityError as error:
         raise HTTPException(
@@ -139,7 +172,7 @@ def create_asset(
             detail="the asset listing already exists or violates a database constraint",
         ) from error
     response.headers["Location"] = f"/api/v1/assets/{record.id}"
-    return AssetResponse.model_validate(record)
+    return _asset_response(record)
 
 
 @router.get("/assets/{asset_id}", response_model=AssetResponse, tags=["assets"])
@@ -148,7 +181,133 @@ def get_asset(asset_id: UUID, session: DbSession) -> AssetResponse:
         record = PortfolioRepository(session).get_asset(asset_id)
     except RecordNotFoundError as error:
         raise _not_found(error) from error
-    return AssetResponse.model_validate(record)
+    return _asset_response(record)
+
+
+@router.get(
+    "/market-data/search",
+    response_model=list[InstrumentMatchResponse],
+    tags=["market data"],
+)
+def search_instruments(
+    provider: Provider,
+    q: str,
+    exchange: str | None = None,
+    instrument_type: str | None = None,
+    limit: int = 20,
+) -> list[InstrumentMatchResponse]:
+    try:
+        matches = provider.search(
+            q,
+            exchange=exchange,
+            instrument_type=instrument_type,
+            limit=limit,
+        )
+    except (ProviderError, ValueError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(error),
+        ) from error
+    return [
+        InstrumentMatchResponse(
+            code=item.code,
+            exchange_code=item.exchange_code,
+            provider_symbol=item.provider_symbol,
+            name=item.name,
+            instrument_type=item.instrument_type,
+            country=item.country,
+            currency=item.currency,
+            isin=item.isin,
+            is_primary=item.is_primary,
+        )
+        for item in matches
+    ]
+
+
+@router.get(
+    "/listings/{listing_id}/prices",
+    response_model=list[PriceObservationResponse],
+    tags=["market data"],
+)
+def list_prices(
+    listing_id: UUID,
+    session: DbSession,
+    date_from: date,
+    date_to: date,
+) -> list[PriceObservationResponse]:
+    if date_from > date_to:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="date_from must not be after date_to",
+        )
+    try:
+        records = MarketDataRepository(session).list_prices(
+            listing_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except RecordNotFoundError as error:
+        raise _not_found(error) from error
+    return [PriceObservationResponse.model_validate(record) for record in records]
+
+
+@router.get(
+    "/portfolios/{portfolio_id}/snapshots",
+    response_model=list[PortfolioSnapshotResponse],
+    tags=["portfolios"],
+)
+def list_snapshots(
+    portfolio_id: UUID,
+    session: DbSession,
+) -> list[PortfolioSnapshotResponse]:
+    repository = MarketDataRepository(session)
+    try:
+        records = repository.list_snapshots(portfolio_id)
+    except RecordNotFoundError as error:
+        raise _not_found(error) from error
+    return [
+        PortfolioSnapshotResponse(
+            id=record.id,
+            portfolio_id=record.portfolio_id,
+            valuation_date=record.valuation_date,
+            cash_balance=record.cash_balance,
+            positions_value=record.positions_value,
+            total_value=record.total_value,
+            realized_pnl=record.realized_pnl,
+            unrealized_pnl=record.unrealized_pnl,
+            total_return=record.total_return,
+            calculation_version=record.calculation_version,
+            input_fingerprint=record.input_fingerprint,
+            revision=record.revision,
+            supersedes_id=record.supersedes_id,
+            created_at=record.created_at,
+            positions=[
+                SnapshotPositionResponse.model_validate(position)
+                for position in repository.snapshot_positions(record.id)
+            ],
+        )
+        for record in records
+    ]
+
+
+@router.get(
+    "/market-data/issues",
+    response_model=list[DataQualityIssueResponse],
+    tags=["market data"],
+)
+def list_market_data_issues(
+    session: DbSession,
+    issue_status: str = "OPEN",
+) -> list[DataQualityIssueResponse]:
+    if issue_status not in {"OPEN", "RESOLVED"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="issue_status must be OPEN or RESOLVED",
+        )
+    return [
+        DataQualityIssueResponse.model_validate(record)
+        for record in MarketDataRepository(session).list_issues(status=issue_status)
+    ]
 
 
 @router.get(

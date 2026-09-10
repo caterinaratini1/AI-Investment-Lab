@@ -1,5 +1,7 @@
 -r requirements-lock.txt
 
 -e ./packages/domain --config-settings editable_mode=compat
+-e ./packages/data_providers --config-settings editable_mode=compat
 -e ./packages/db --config-settings editable_mode=compat
 -e ./apps/api --config-settings editable_mode=compat
+-e ./apps/worker --config-settings editable_mode=compat

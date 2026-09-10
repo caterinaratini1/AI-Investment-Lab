@@ -19,6 +19,8 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://ai_lab:ai_lab@localhost:5432/ai_investment_lab",
     )
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    eodhd_api_token: str | None = None
+    eodhd_base_url: str = "https://eodhd.com/api"
 
 
 @lru_cache

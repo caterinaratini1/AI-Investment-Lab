@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: ai-investment-lab-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/v1/ready
+    envVars:
+      - key: AIL_ENVIRONMENT
+        value: production
+      - key: AIL_DATABASE_URL
+        sync: false
+      - key: AIL_EODHD_API_TOKEN
+        sync: false
+      - key: AIL_CORS_ORIGINS
+        sync: false
+
+  - type: cron
+    name: ai-investment-lab-daily-market-data
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    schedule: "30 5 * * *"
+    dockerCommand: >-
+      sh -c 'alembic upgrade head && python -m ai_investment_lab.worker daily'
+    envVars:
+      - key: AIL_ENVIRONMENT
+        value: production
+      - key: AIL_DATABASE_URL
+        sync: false
+      - key: AIL_EODHD_API_TOKEN
+        sync: false

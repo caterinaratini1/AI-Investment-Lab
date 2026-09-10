@@ -1,6 +1,6 @@
 # Rationale for major project choices
 
-- Status: Phase 0 baseline plus Phase 1 implementation record
+- Status: Phase 0 baseline plus Phase 1 and Phase 2 implementation record
 - Decision date: 10 September 2026
 - Policy version: `0.1.0`
 
@@ -28,6 +28,11 @@ The choices are evaluated against six priorities, in order:
 | Execution | First regular-session open strictly after a decision is sealed |
 | Costs | 10 bps commission with EUR 1 minimum, 5 bps adverse slippage, 20 bps non-EUR FX fee |
 | Market data | EODHD worldwide end-of-day data; ECB for €STR |
+| Market-data integration | Thin provider-neutral Python contract with a direct, typed HTTPX EODHD adapter |
+| Market-data cache | PostgreSQL system of record; immutable observation revisions rather than Redis/filesystem cache |
+| Market calendar | Provider exchange details materialized per civil date; missing open sessions fail, closed sessions carry visibly |
+| Daily valuation | Prior UTC day at 05:30 UTC via an idempotent Render cron command |
+| Snapshot lineage | Append-only revisions keyed by a SHA-256 fingerprint of portfolio and exact market-data inputs |
 | Accounting | Moving weighted-average cost in EUR; exact decimals; round-half-even at monetary boundaries |
 | Frontend | TypeScript, React, Next.js App Router |
 | Backend | Python, FastAPI, Pydantic |
@@ -433,6 +438,8 @@ Deferral is not omission: each item has a trigger and must receive its own appen
 
 Phase 1 freezes Next.js 16.3.4, React 19.3.0, TypeScript 5.9.3, ESLint 10.9.1, FastAPI 0.141.1, Pydantic 2.13.5, SQLAlchemy 2.0.52, Alembic 1.19.2, and psycopg 3.3.5. npm transitive dependencies live in `package-lock.json`; Python's resolved production and development environments live in `requirements-runtime-lock.txt` and `requirements-lock.txt`, while each package manifest retains its direct runtime contract. PostgreSQL 17.11 is pinned in local Compose and CI. The [PostgreSQL release archive](https://www.postgresql.org/docs/release/) and [official container tags](https://hub.docker.com/_/postgres/tags?name=17.11-alpine) provide the upstream version record.
 
+Phase 2 promotes HTTPX 0.28.1 from a test-only dependency to the runtime lock because the provider adapter now owns outbound HTTP. No calendar, cache, scheduler, dataframe, or queue library was added: the provider calendar, PostgreSQL, Render, and standard-library dates satisfy the implemented workload with fewer versioned failure surfaces.
+
 This is the best reproducibility/maintenance balance for Day Zero preparation. Locking prevents accidental drift; updating remains possible through an explicit reviewed change with all quality gates rerun. Container digests are not frozen yet because development must receive compatible security rebuilds of the same PostgreSQL patch tag; production deployment will record its immutable image digest.
 
 ## 26. Moving weighted-average cost rather than FIFO or specific lots
@@ -469,9 +476,111 @@ The engine could have remained a library until the dashboard phase, or Phase 1 c
 
 The selected middle path exposes only health/readiness, portfolio and asset creation/read, position/transaction reads, and a fictional trade command. FastAPI owns validation and transaction orchestration; the pure domain package owns accounting. A minimal Next.js shell proves the requested frontend stack and production build without pretending that static placeholders are a portfolio dashboard.
 
-Caller-supplied price and optional `decision_id` are explicitly transitional. Phase 2 replaces manual prices with stored, time-eligible market observations; Phase 4 makes a prior sealed decision mandatory. The endpoint cannot be used for Day Zero until both controls exist. This boundary is better than inventing provenance because it keeps Phase 1 testable while making its limitations impossible to confuse with launch readiness.
+Caller-supplied price and optional `decision_id` are explicitly transitional. Phase 2 supplies stored, time-eligible market observations; the later decision/execution workflow must make those observations authoritative for trades, and Phase 4 makes a prior sealed decision mandatory. The Phase 1 endpoint cannot be used for Day Zero until both controls exist. This boundary is better than inventing provenance because it keeps Phase 1 testable while making its limitations impossible to confuse with launch readiness.
 
-## 30. Change rule
+## 30. Direct EODHD adapter behind a provider-neutral contract
+
+### Options considered
+
+| Option | Strength | Weakness here |
+| --- | --- | --- |
+| Call EODHD directly throughout API/worker code | Few files initially | Provider field names, authentication, and errors leak into valuation logic and make replacement invasive |
+| Use a third-party EODHD SDK | Less endpoint boilerplate | Adds another release/maintenance dependency and can obscure raw response/error behavior needed for audit evidence |
+| Build a broad internal market-data framework | Maximum theoretical flexibility | Too much abstraction before a second provider or intraday feed exists |
+| Define a narrow contract and write a thin adapter | Provider isolation with inspectable HTTP and payload normalization | A small amount of explicit parsing code must be maintained |
+
+The narrow contract plus direct HTTPX adapter is the best fit. The application sees `PriceBar`, `InstrumentMatch`, and `ExchangeCalendar`, not EODHD dictionaries. The adapter still preserves each normalized raw row and its checksum, uses `Decimal` when decoding JSON, checks ordering/ranges/OHLC invariants, and converts authentication/network/payload failures into credential-safe error types.
+
+The implemented surface is intentionally no larger than Phase 2: EODHD's documented [historical EOD endpoint](https://eodhd.com/financial-apis/api-for-historical-data-and-volumes), [search endpoint](https://eodhd.com/financial-apis/search-api-for-stocks-etfs-mutual-funds), and [exchange-hours/holiday endpoint](https://eodhd.com/financial-apis/exchanges-api-trading-hours-and-stock-market-holidays). If a second provider arrives, it must satisfy the same normalized contract and receive an explicit precedence decision; generic abstractions are added only where two real implementations prove they are needed.
+
+## 31. Stable assets separated from tradable listings
+
+An ISIN identifies a security; a ticker identifies a listing in an exchange context; EODHD adds its own exchange code and composite symbol. Keeping all four on one `assets` row made a second listing of the same security ambiguous and encouraged code to assume that `XAMS`, `AS`, and `.AS` were interchangeable.
+
+### Options considered
+
+- Keep the Phase 1 combined row and add provider columns. This is the smallest migration, but permanently encodes a one-security/one-listing assumption.
+- Use only provider symbols as identity. This simplifies retrieval but lets a vendor rename redefine the experiment's security identity.
+- Separate `assets` and `listings`. This adds one join, but accurately models stable security identity, venue/currency, and provider mapping.
+
+Separation is best because prices and exchange calendars belong to a tradable listing while positions and theses belong to the underlying security. The migration preserves existing assets and creates their primary listing; known `XAMS` rows receive the explicit EODHD `AS` mapping, while unknown MICs remain unmapped and therefore fail safely until an operator verifies them. Guessing a vendor suffix would be faster but could attach valid-looking prices for the wrong instrument.
+
+## 32. PostgreSQL as the authoritative cache
+
+### Options considered
+
+| Cache | Advantage | Why it was not selected |
+| --- | --- | --- |
+| In-process memory | Fast and dependency-free | Lost on restart, not shared by API/cron, and has no provenance |
+| Filesystem/Parquet | Efficient analytical scans and portable archives | Awkward concurrency, relational lineage, and correction workflows for the operational system |
+| Redis | Excellent TTL and high-throughput transient caching | Adds infrastructure while still requiring PostgreSQL for durable audit records |
+| PostgreSQL | Transactional joins, constraints, revisions, and one operational store | Less efficient than columnar storage for future large-scale research scans |
+
+PostgreSQL is best because “cache” here means a durable point-in-time evidence record, not a disposable speed layer. The expected workload—tens of listings and one EOD row per session—is tiny. API reads continue during provider outages, worker and API share the same truth, and snapshots can foreign-key the exact observations used. Parquet may later become a derived research export; Redis becomes justified only if measured read/load patterns exceed the database, never as the audit source.
+
+## 33. Append-only source corrections instead of upserts
+
+Overwriting a provider row gives callers a clean current table but makes a published result impossible to reproduce after the provider corrects history. Keeping only raw response files preserves bytes but does not tell calculations which version was active. Full bitemporal tables are powerful but add valid/system interval semantics the MVP does not yet need.
+
+Phase 2 therefore appends numbered revisions and links each correction with `supersedes_id`. Exact duplicate checksums are cache hits. Changed checksums create both a new observation and a visible `PRICE_CORRECTION` issue. PostgreSQL triggers reject update/delete on price, FX, exchange-session, snapshot, and snapshot-position evidence. Current read endpoints select the highest revision, while old snapshots keep foreign keys to their original inputs.
+
+This is the strongest simple design: current results are convenient, historical claims remain reproducible, and no updater can quietly erase an inconvenient price. SHA-256 is used as a change detector and lineage fingerprint, not as proof that upstream data was true.
+
+## 34. Provider calendars with fail-closed missing-data rules
+
+### Options considered
+
+- Treat Monday–Friday as open. Simple, but produces false alarms on holidays and misses early closes.
+- Carry the last close for every missing row. Smooth dashboards, but silently masks outages, delistings, bad symbols, and provider failures.
+- Use a general exchange-calendar library. Strong historical coverage for supported venues, but creates a second authority and reconciliation problem when its sessions differ from the selected data provider.
+- Materialize the provider's exchange schedule and classify every date. Aligns price expectations with the feed actually used and makes the chosen calendar revision traceable.
+
+Provider-calendar materialization is best for the live experiment. Each civil date is stored as `OPEN`, `CLOSED`, or `EARLY_CLOSE`. The adapter uses EODHD v2's richer current-year schedule and its explicitly date-bounded v1 response for historical years, avoiding the false assumption that v2's current-year holiday set honors a backfill range. An absent open-session bar freezes valuation and enters the exception queue; a closed-session gap may carry the last price only with the source date and stale-day count exposed. Calendar coverage itself is mandatory, and a returned holiday set from the wrong year is rejected.
+
+The 35% absolute raw close-to-close threshold is deliberately an alert, not a rejection. A genuine crash can exceed it, while a split, symbol collision, or bad decimal can produce the same shape. Human/provider reconciliation determines the cause without deleting either observation.
+
+## 35. One database-backed daily command at 05:30 UTC
+
+### Options considered
+
+| Scheduler | Strength | Weakness here |
+| --- | --- | --- |
+| API request/background task | Easy to trigger | Request lifetime, restarts, and duplicate calls are poor scheduling guarantees |
+| GitHub Actions schedule | Already available and cheap | Deployment credentials and production operations become coupled to CI; scheduled runs can be delayed |
+| Celery/Redis worker | Rich retries and distributed queues | Broker, worker lifecycle, monitoring, and delivery semantics exceed one daily low-volume job |
+| Render cron | Same Docker image/config as API, run history, UTC schedules, single-run behavior | Vendor-specific deployment declaration and paid compute |
+
+Render cron remains the best initial choice. The [Render cron documentation](https://render.com/docs/cronjobs) states that schedules use UTC and concurrent scheduled runs are delayed under its single-run guarantee. The command is still application-idempotent because infrastructure guarantees cannot protect against manual retries or partial failures. PostgreSQL job keys suppress completed duplicates, incomplete/failed runs retry with the same key, and a six-hour lease lets an abandoned `RUNNING` record recover without permitting normal concurrent execution. An operator can supply a new explicit key for a verified correction; identical inputs still deduplicate by snapshot fingerprint, while changed observation IDs append a restated revision.
+
+`05:30 UTC` processes the previous UTC date. Running at midnight would race feeds that publish after local closes; waiting until morning gives European, American, and Asian EOD rows time to settle while keeping the dashboard daily. EODHD says its daily data is generally updated within hours after exchange close. A later measured availability SLO can move the time through a reviewed change; “as soon as possible” is not reproducible enough.
+
+## 36. Raw close for valuation; adjusted close for reconciliation
+
+Using adjusted close alone is attractive for return charts, but it embeds split/dividend transformations that do not directly equal the cash value of shares held that day. Using only raw close keeps holdings intuitive but removes a valuable cross-check and makes later total-return research harder. Storing both is cheap and preserves the provider's explicit distinction.
+
+Raw close is therefore authoritative for portfolio market value. Adjusted close is stored beside it for reconciliation and analytics. Corporate actions will be booked explicitly; adjusted close will never silently manufacture shares or dividend cash. This avoids double counting and makes the cash ledger explain the economic result.
+
+## 37. Explicit FX inversion and same-date eligibility
+
+The main alternatives were silently relying on pair orientation, using a separate central-bank daily FX feed, or normalizing the primary provider's pair. A second source would improve independent validation but creates publication-time and holiday precedence rules before Phase 2 needs them. Silent orientation is unacceptable because inverting the wrong pair produces plausible but materially wrong values.
+
+The stored contract is always “EUR received per one unit of listing currency.” EODHD's `EURUSD.FOREX` is USD per EUR, so Phase 2 retains the raw rate, records `inverted=true`, and stores `1 / raw_rate` at twelve decimal places. Weekday valuation requires a same-date FX close; weekend valuation may carry the latest prior rate with its observation ID. This makes every conversion direction inspectable and keeps price/FX eligibility symmetric.
+
+## 38. Fingerprinted snapshot revisions rather than mutable daily totals
+
+A mutable `portfolio_value(date)` row is easy to query but loses the prior result after a provider correction or code change. Recomputing on every request always shows current logic but cannot reproduce what was published. Serializing the whole portfolio as opaque JSON preserves content while weakening constraints and drill-down lineage.
+
+Phase 2 replays immutable transactions through the UTC valuation cutoff, then stores relational snapshots and position breakdowns. A canonical fingerprint includes calculation version, included transaction IDs, derived cash, positions, and exact price/calendar/FX IDs. Identical inputs return the existing row; changed inputs append a revision that supersedes, but does not alter, the former one. Position rows link directly to every source record and expose freshness. Transaction replay is essential: otherwise a trade executed tomorrow would change the mutable position projection used to restate yesterday.
+
+This makes the snapshot both fast enough for the dashboard and independently recalculable. It also makes restatement honest: a correction produces a second version rather than causing yesterday's public number to appear as if it had always been different.
+
+## 39. Phase 2 boundaries are fail-closed Day Zero gates
+
+Phase 2 does not claim that storing raw and adjusted prices is corporate-action accounting. EODHD's split/dividend feeds, entitlement timing, payment-date cash, FX, and position adjustments require a dedicated tested ledger extension. Until it exists, a corporate-action-affected position cannot pass the Day Zero readiness gate. Trade history is already replayed for historical snapshots; the remaining replay limitation is the intentionally absent corporate-action ledger.
+
+Keeping those limits explicit is better than using adjusted close as an invisible shortcut. The Phase 2 milestone is reliable market-data acquisition and reproducible daily valuation under its stated inputs. Launch requires the remaining financial events to become equally explicit.
+
+## 40. Change rule
 
 Before Day Zero, a major choice may be revised by updating this document, the relevant policy/specification, the machine-readable configuration when applicable, and the decision record in the same commit.
 

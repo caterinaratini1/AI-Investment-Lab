@@ -21,6 +21,7 @@ services:
       dockerfile: apps/api/Dockerfile
     environment:
       AIL_DATABASE_URL: postgresql+psycopg://ai_lab:ai_lab@postgres:5432/ai_investment_lab
+      AIL_EODHD_API_TOKEN: ${AIL_EODHD_API_TOKEN:-}
     ports:
       - "8000:8000"
     depends_on:

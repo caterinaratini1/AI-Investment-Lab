@@ -3,21 +3,18 @@ requires = ["setuptools==80.9.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ai-investment-lab-api"
+name = "ai-investment-lab-worker"
 version = "0.1.0"
-description = "FastAPI service for AI Investment Lab"
+description = "Idempotent market-data and valuation jobs for AI Investment Lab"
 requires-python = ">=3.13"
 dependencies = [
   "ai-investment-lab-data-providers==0.1.0",
   "ai-investment-lab-db==0.1.0",
   "ai-investment-lab-domain==0.1.0",
-  "fastapi==0.141.1",
-  "pydantic==2.13.5",
-  "pydantic-settings==2.15.0",
-  "uvicorn[standard]==0.52.4"
+  "SQLAlchemy==2.0.52"
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["ai_investment_lab.api*"]
+include = ["ai_investment_lab.worker*"]
 namespaces = true

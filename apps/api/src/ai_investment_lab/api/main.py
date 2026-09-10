@@ -11,8 +11,8 @@ def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(
         title="AI Investment Lab API",
-        summary="Auditable paper-portfolio accounting API",
-        version="0.1.0",
+        summary="Auditable paper-portfolio and point-in-time market-data API",
+        version="0.2.0",
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",

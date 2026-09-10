@@ -1,11 +1,11 @@
 """Validated public API schemas."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from ai_investment_lab.domain import AssetType, TradeSide
 
@@ -50,12 +50,33 @@ class AssetCreate(BaseModel):
     currency: Currency
     asset_type: AssetType
     sector: Annotated[str | None, StringConstraints(strip_whitespace=True, max_length=80)] = None
+    provider_symbol: Annotated[
+        str | None,
+        StringConstraints(strip_whitespace=True, to_upper=True, min_length=3, max_length=80),
+    ] = None
+    provider_exchange_code: Annotated[
+        str | None,
+        StringConstraints(strip_whitespace=True, to_upper=True, min_length=1, max_length=16),
+    ] = None
+    exchange_timezone: Annotated[
+        str | None,
+        StringConstraints(strip_whitespace=True, min_length=3, max_length=64),
+    ] = None
+
+    @model_validator(mode="after")
+    def validate_provider_identity(self) -> "AssetCreate":
+        if (self.provider_symbol is None) != (self.provider_exchange_code is None):
+            raise ValueError("provider_symbol and provider_exchange_code must be supplied together")
+        if self.provider_symbol and not self.provider_symbol.endswith(
+            f".{self.provider_exchange_code}"
+        ):
+            raise ValueError("provider_symbol suffix must match provider_exchange_code")
+        return self
 
 
 class AssetResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: UUID
+    listing_id: UUID
     name: str
     ticker: str
     isin: str
@@ -63,7 +84,91 @@ class AssetResponse(BaseModel):
     currency: str
     asset_type: AssetType
     sector: str | None
+    provider: str
+    provider_symbol: str | None
+    provider_exchange_code: str | None
+    exchange_timezone: str | None
     created_at: datetime
+
+
+class PriceObservationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    listing_id: UUID
+    provider: str
+    provider_symbol: str
+    observation_date: date
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    adjusted_close: Decimal
+    volume: Decimal
+    currency: str
+    revision: int
+    supersedes_id: UUID | None
+    retrieved_at: datetime
+    source_checksum: str
+
+
+class SnapshotPositionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    asset_id: UUID
+    listing_id: UUID
+    quantity: Decimal
+    cost_basis: Decimal
+    price: Decimal
+    fx_rate_to_base: Decimal
+    market_value: Decimal
+    unrealized_pnl: Decimal
+    price_date: date
+    stale_days: int
+    valuation_status: str
+
+
+class PortfolioSnapshotResponse(BaseModel):
+    id: UUID
+    portfolio_id: UUID
+    valuation_date: date
+    cash_balance: Decimal
+    positions_value: Decimal
+    total_value: Decimal
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
+    total_return: Decimal
+    calculation_version: str
+    input_fingerprint: str
+    revision: int
+    supersedes_id: UUID | None
+    created_at: datetime
+    positions: list[SnapshotPositionResponse]
+
+
+class InstrumentMatchResponse(BaseModel):
+    code: str
+    exchange_code: str
+    provider_symbol: str
+    name: str
+    instrument_type: str
+    country: str | None
+    currency: str | None
+    isin: str | None
+    is_primary: bool | None
+
+
+class DataQualityIssueResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    listing_id: UUID | None
+    observation_date: date
+    issue_type: str
+    status: str
+    detail: str
+    detected_at: datetime
+    resolved_at: datetime | None
 
 
 class TradeCreate(BaseModel):

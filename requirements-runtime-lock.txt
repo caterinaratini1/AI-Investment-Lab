@@ -1,4 +1,4 @@
-# Exact Phase 1 API/runtime environment, resolved for Python 3.13 on 2026-09-10.
+# Exact Phase 2 API/worker runtime environment, resolved for Python 3.13 on 2026-09-10.
 Mako==1.4.1
 MarkupSafe==3.0.3
 PyYAML==6.0.3
@@ -7,9 +7,12 @@ alembic==1.19.2
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
+certifi==2026.7.22
 click==8.5.0
 fastapi==0.141.1
 h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
 httptools==0.8.0
 idna==3.19
 psycopg-binary==3.3.5
