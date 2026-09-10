@@ -73,6 +73,20 @@ The implementation contract, API routes, local setup, tests, and deliberate phas
 
 The data contract, worker commands, schedule, exception workflow, API routes, and remaining Day Zero gates are documented in [`docs/phase-2.md`](docs/phase-2.md).
 
+## Phase 3
+
+- [x] Build responsive overview, performance, portfolio, and methodology navigation
+- [x] Show portfolio value, daily/total return, benchmark, excess return, and cash
+- [x] Add an accessible portfolio-versus-`IWDA` chart with a tabular alternative
+- [x] Add holdings, local/EUR values, P&L, weights, and market-data freshness
+- [x] Expose preview, empty, live, quality-warning, and fail-closed API-error states
+- [x] Generate the TypeScript API contract from FastAPI OpenAPI and verify drift in CI
+- [x] Add a Figma-ready design/token handoff and branded social preview
+- [x] Test components/data states and validate the production Next.js build
+- [ ] Connect the external Figma and Vercel projects and verify the public production URL
+
+The design specification, data-state contract, configuration, deployment steps, and deliberate Phase 4/5 boundaries are documented in [`docs/phase-3.md`](docs/phase-3.md).
+
 ## Guiding principles
 
 1. **No hindsight.** A decision is sealed before its execution price exists.
@@ -107,11 +121,11 @@ The data contract, worker commands, schedule, exception workflow, API routes, an
 - Docker for local development; GitHub Actions for automated checks
 - Vercel for the web app, Render for API/jobs, and Supabase for PostgreSQL and private evidence storage
 
-The Phase 2 foundation is implemented as a modular monorepo. See the [architecture document](docs/architecture.md) for boundaries and the [project rationale](rationale.md) for the alternatives considered.
+The Phase 3 dashboard is implemented on the modular monorepo foundation. See the [architecture document](docs/architecture.md) for boundaries and the [project rationale](rationale.md) for the alternatives considered.
 
 ## Status
 
-Phases 0, 1, and the Phase 2 market-data milestone are complete. The experiment has **not** started: provider/public-display entitlement, corporate-action accounting, a Day Zero timestamp, model version, initial portfolio, and market-condition snapshot have not been sealed yet. Phase 3 builds the public dashboard on the stored snapshot API.
+Phases 0–2 are complete, and the Phase 3 dashboard implementation is complete and deployment-ready. Its native Figma artifact and public Vercel URL remain external release steps. The experiment has **not** started: provider/public-display entitlement, corporate-action accounting, a Day Zero timestamp, model version, initial portfolio, and market-condition snapshot have not been sealed yet.
 
 ## License
 

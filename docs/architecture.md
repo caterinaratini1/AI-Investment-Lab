@@ -80,7 +80,7 @@ Large licensed raw responses and evidence files belong in private object storage
 
 | Area | Choice |
 | --- | --- |
-| Web | Next.js 16 App Router, React 19, and TypeScript 5.9; shell initialized in Phase 1 |
+| Web | Next.js 16 App Router, React 19, TypeScript 5.9, and Recharts 3; dashboard implemented in Phase 3 |
 | API | Python 3.13, FastAPI 0.141, and Pydantic 2.13 |
 | Persistence | PostgreSQL 17 with SQLAlchemy 2.0 and Alembic 1.19 |
 | Numeric model | Python `Decimal` and PostgreSQL `numeric` with explicit scale |
@@ -104,4 +104,4 @@ Supabase database backups do not include Storage objects, so the production runb
 
 ## 8. Phase boundaries
 
-Phase 1 created `apps/api`, `packages/domain`, `packages/db`, migrations, accounting tests, and the minimal `apps/web` shell required by the original brief. Phase 2 adds `packages/data_providers`, `apps/worker`, versioned market-data persistence, daily snapshot APIs, and the Render schedule. Phase 3 turns the shell into the data-backed dashboard and generates its API client. This ordering keeps authoritative financial behavior downstream of tested accounting contracts while proving the web toolchain early.
+Phase 1 created `apps/api`, `packages/domain`, `packages/db`, migrations, accounting tests, and the minimal `apps/web` shell required by the original brief. Phase 2 added `packages/data_providers`, `apps/worker`, versioned market-data persistence, daily snapshot APIs, and the Render schedule. Phase 3 turns the shell into a request-time, data-backed dashboard, adds the generated `packages/api_client` workspace, and confines chart interactivity to one client island. This ordering keeps authoritative financial behavior downstream of tested accounting contracts while proving the web toolchain early.

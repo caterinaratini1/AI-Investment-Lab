@@ -1,0 +1,11 @@
+{
+  "name": "@ai-investment-lab/api-client",
+  "private": true,
+  "version": "0.1.0",
+  "types": "./src/schema.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/schema.d.ts"
+    }
+  }
+}

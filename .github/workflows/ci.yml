@@ -54,6 +54,8 @@ jobs:
         run: mypy apps/api/src apps/worker/src packages/data_providers/src packages/db/src packages/domain/src
       - name: Test accounting, market data, persistence, worker, and API
         run: pytest
+      - name: Verify committed OpenAPI contract is current
+        run: python scripts/export_openapi.py && git diff --exit-code -- schemas/openapi.json
       - name: Verify PostgreSQL migration lifecycle and schema parity
         run: |
           alembic upgrade head
@@ -72,5 +74,7 @@ jobs:
           cache: npm
       - name: Install locked web dependencies
         run: npm ci
-      - name: Lint, type-check, and build
-        run: npm run lint:web && npm run typecheck:web && npm run build:web
+      - name: Verify generated TypeScript API contract is current
+        run: npm run generate:api-client && git diff --exit-code -- packages/api_client/src/schema.d.ts
+      - name: Lint, type-check, test, and build
+        run: npm run lint:web && npm run typecheck:web && npm run test:web && npm run build:web

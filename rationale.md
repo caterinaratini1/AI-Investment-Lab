@@ -1,6 +1,6 @@
 # Rationale for major project choices
 
-- Status: Phase 0 baseline plus Phase 1 and Phase 2 implementation record
+- Status: Phase 0 baseline plus Phase 1–3 implementation record
 - Decision date: 10 September 2026
 - Policy version: `0.1.0`
 
@@ -35,6 +35,8 @@ The choices are evaluated against six priorities, in order:
 | Snapshot lineage | Append-only revisions keyed by a SHA-256 fingerprint of portfolio and exact market-data inputs |
 | Accounting | Moving weighted-average cost in EUR; exact decimals; round-half-even at monetary boundaries |
 | Frontend | TypeScript, React, Next.js App Router |
+| Dashboard rendering | Request-time Server Component with one Recharts client island |
+| Dashboard publication states | Explicit preview, empty, live, and fail-closed error modes |
 | Backend | Python, FastAPI, Pydantic |
 | Database | PostgreSQL, hosted initially by Supabase |
 | Persistence | SQLAlchemy and Alembic; exact `numeric`/`Decimal` arithmetic |
@@ -580,7 +582,116 @@ Phase 2 does not claim that storing raw and adjusted prices is corporate-action 
 
 Keeping those limits explicit is better than using adjusted close as an invisible shortcut. The Phase 2 milestone is reliable market-data acquisition and reproducible daily valuation under its stated inputs. Launch requires the remaining financial events to become equally explicit.
 
-## 40. Change rule
+## 40. Primary comparison before dashboard detail
+
+### Options considered
+
+| Information architecture | Strength | Weakness here |
+| --- | --- | --- |
+| Holdings-first brokerage layout | Familiar to active investors | Makes the experiment's benchmark question secondary and encourages stock-picking interpretation |
+| Many equal KPI cards | Surfaces a large amount of information at once | Removes hierarchy and makes unvalidated risk figures look as authoritative as snapshot values |
+| Narrative landing page before data | Explains the project carefully | Makes returning readers scroll before learning whether the portfolio is winning |
+| Primary comparison, then explanation/drill-down | Answers the research question immediately while preserving context | Requires disciplined boundaries when downstream data is not implemented |
+
+The selected structure puts the EUR portfolio value, benchmark return, and excess return immediately below the experiment statement, followed by the shared-capital value chart. Holdings, P&L, data integrity, and methodology explain that result beneath it. This is best because the public product is an experiment tracker, not a trading terminal: a reader should learn the outcome before inspecting its components.
+
+The screen deliberately keeps one dominant heading and one dominant visualization. Risk metrics that Phase 5 has not calculated and decisions that Phase 4 has not sealed are visible as named future capabilities rather than populated with estimates. This preserves the planned information architecture without confusing a placeholder with evidence.
+
+## 41. Request-time Server Component with a chart client island
+
+### Options considered
+
+| Rendering model | Advantage | Why it was not selected |
+| --- | --- | --- |
+| Browser-only data fetching | Simple static host and easy interactive state | Exposes API configuration, adds loading waterfalls, and sends JavaScript for content that is primarily read-only |
+| Entire dashboard as a Client Component | One component model for charts and data | Enlarges the client bundle and moves publication/error decisions into the browser |
+| Fully server-rendered SVG chart | Almost no client JavaScript | Loses responsive chart sizing, keyboard exploration, and later interaction without substantial custom code |
+| Server-rendered dashboard plus client chart island | Server-controlled data state with focused interactivity | Requires an explicit serializable view-model boundary |
+
+Phase 3 selects the last option. The Next.js page declares request-time rendering, reads server-only configuration, fetches FastAPI, and prepares a serializable view model. Only the Recharts comparison is a Client Component. Holdings, metrics, disclosures, warnings, and methodology remain semantic server-rendered HTML.
+
+This is the strongest boundary because API endpoints and portfolio identifiers do not need `NEXT_PUBLIC_` exposure, the first response contains the meaningful content, and the financial publication rules remain testable without a browser. It also preserves the core architecture: Python creates authoritative financial values; the server page selects and labels them; the client island only visualizes already prepared numbers.
+
+## 42. Generated OpenAPI types rather than parallel interfaces
+
+### Options considered
+
+- Hand-write TypeScript response interfaces. This is fast for the first endpoint but allows renames, nullability, decimal serialization, and enum changes to diverge silently.
+- Introduce a shared cross-language schema framework. This could be powerful, but would replace FastAPI/Pydantic as the already functioning API authority and add another generator.
+- Call the API with untyped JSON or runtime casts. This has the smallest build step but turns contract errors into production dashboard failures.
+- Export FastAPI OpenAPI and generate TypeScript declarations. This uses the backend's existing validation model and makes drift mechanically detectable.
+
+Generated OpenAPI declarations are best because the contract already exists in Pydantic. `scripts/export_openapi.py` emits canonical, sorted OpenAPI; `openapi-typescript` emits `packages/api_client/src/schema.d.ts`; CI regenerates both and rejects a diff. The web workspace declares the generated package as an explicit dependency, which also lets Vercel understand the monorepo dependency graph.
+
+The generated artifact is committed. Generating only during deployment would conceal unexpected schema changes inside a build log, while committing it lets reviewers see the frontend impact in the same change as the Python model. A full generated request client is deferred: Phase 3 needs a small number of server-side GETs, and its timeout, cache, and error behavior is clearer in the narrow fetch wrapper.
+
+## 43. Recharts for the primary comparison
+
+### Options considered
+
+| Chart approach | Strength | Weakness here |
+| --- | --- | --- |
+| Hand-written SVG | Small and fully controlled | Responsive axes, tooltips, keyboard access, and future filters become bespoke chart-library work |
+| Chart.js | Mature ecosystem and good canvas performance | Canvas is less natural for semantic/accessibility layering and React composition |
+| D3 primitives | Maximum visual control | Low-level scales, axes, hit-testing, and responsive behavior are disproportionate for a two-series daily chart |
+| Apache ECharts | Feature-rich and strong for dense dashboards | Larger/general-purpose surface than this restrained experiment view needs |
+| Recharts | React-native composition, responsive container, SVG, accessible interaction layer | Client-only library and not an accessibility substitute by itself |
+
+Recharts is the best fit for the one interactive time-series view. It composes naturally inside the React client island, supports a responsive container, and keeps output in SVG. The chart disables animation because motion adds no analytical meaning and can impede comparison.
+
+Library accessibility is treated as an enhancement, not the evidence layer. The chart has an explicit label, keyboard-aware accessibility mode, visible legend, non-color line differentiation, and a disclosure containing the exact dates and values as a semantic table. The table remains the durable alternative if a browser, assistive technology, print view, or future library version cannot convey the SVG effectively.
+
+## 44. Indicative benchmark view until a benchmark ledger exists
+
+The dashboard needs a comparison in Phase 3, but Phase 2 currently exposes append-only portfolio snapshots and listing prices—not authoritative benchmark units and cash. Three options were considered:
+
+- Hide the benchmark until all benchmark accounting exists. This is maximally conservative but leaves Phase 3 unable to answer the project's primary question.
+- Calculate and publish a full benchmark return in TypeScript. This duplicates financial policy in the presentation layer and would omit or improvise execution, residual cash, costs, FX, distributions, and corporate actions.
+- Show a clearly labelled, rebased stored adjusted-close series as an interim comparison, while retaining the frozen benchmark ledger as a launch gate.
+
+The third option is best for a pre-launch dashboard. On dates shared with portfolio snapshots, the server selects the latest stored `IWDA` price revision and rebases adjusted close to the portfolio's starting capital. It labels the result “indicative until benchmark ledger launch.” Missing benchmark configuration produces blanks, not substituted prices.
+
+This choice is intentionally not the final benchmark methodology. Before Day Zero, the Python engine must create benchmark units, modeled execution, fees, FX, cash residual, distributions/corporate actions, and versioned benchmark snapshots. At that point the dashboard should consume those authoritative values and remove the interim calculation. Making the limitation public is better than either withholding the product question or pretending a price ratio is a net investable portfolio.
+
+## 45. Four explicit publication states and fail-closed live errors
+
+### Options considered
+
+| Failure/empty behavior | Benefit | Integrity problem |
+| --- | --- | --- |
+| Always show demo data on failure | Dashboard always looks complete | An outage can masquerade as a real portfolio result |
+| Blank page or generic 500 | Cannot show false numbers | Gives observers no actionable distinction between pre-launch, no snapshot, and service failure |
+| Browser-cached last success | Resilient during outages | Requires a provenance-aware cache and visible age rules not yet implemented |
+| Explicit preview, empty, live, and error states | Every number's publication status is unambiguous | More state branches and tests |
+
+Four explicit states are best. Missing live identifiers activates a fixed preview fixture with an unavoidable illustrative disclosure. A valid portfolio without snapshots produces an empty state. Successful API reads produce live state with calculation/revision metadata. Once live configuration exists, any required API failure hides all demo values and produces an error state.
+
+This asymmetry is deliberate. Preview mode is a development and pre-launch product sample; it is never a recovery source. A later stale-while-error mode may be added only if the last successful snapshot, its retrieval time, and the current failure are all presented together.
+
+## 46. Semantic responsive HTML instead of separate mobile markup
+
+Separate desktop and mobile component trees allow layout freedom but risk different labels, calculations, and accessibility behavior. A div-based data grid can be visually responsive but loses native table navigation. Keeping a wide desktop table with horizontal scrolling preserves semantics, but forces phone readers to pan across every holding.
+
+Phase 3 uses one semantic `<table>` for holdings and changes only its CSS presentation below 620 px. Column labels are repeated through `data-label` in the stacked phone layout, while the DOM retains headers, rows, and cells. Summary cards collapse from five columns to two and then one; paired analysis panels become a single flow. Navigation remains a labelled `<nav>` with horizontal overflow rather than a JavaScript-only menu.
+
+This is best because one source of content prevents mobile/desktop drift and works without hydration. Keyboard focus is high contrast, a skip link bypasses navigation, reduced-motion preference disables smooth scrolling, gains/losses are conveyed by signs and text as well as color, and the chart has an HTML table alternative. WCAG 2.2 AA remains a production goal requiring browser/assistive-technology audit, not a claim made solely from component structure.
+
+## 47. Vitest and Testing Library for Phase 3 web checks
+
+### Options considered
+
+| Test layer | Strength | Why it is not sufficient alone |
+| --- | --- | --- |
+| TypeScript and production build | Catches types, imports, and Next.js compilation errors | Does not verify publication-state behavior or semantic output |
+| Jest | Mature and broadly documented | More integration configuration for the Vite-compatible component pipeline selected here |
+| Vitest + Testing Library | Fast TypeScript/React tests with user-facing semantic queries | JSDOM does not validate real layout, chart geometry, or all browser accessibility |
+| Playwright only | Real browser, responsiveness, and end-to-end network behavior | Slower and less focused for deterministic state/formatting branches |
+
+Vitest 5 with Testing Library is best for the Phase 3 unit/component layer. Tests prove that absent configuration is labelled preview data, configured API failures fail closed, the primary comparison is an accessible heading, holdings retain table semantics, and future risk metrics remain visibly unpublished. The web CI gate now runs lint, strict TypeScript, these tests, and a production Next.js build.
+
+Playwright remains the selected critical end-to-end tool once a deployed staging API and seeded database exist. Installing it now would add browser binaries and tests that can only exercise the deterministic preview. The current component tests plus server-rendered smoke check cover the implemented boundary without suggesting that JSDOM replaces visual, responsive, or assistive-technology QA.
+
+## 48. Change rule
 
 Before Day Zero, a major choice may be revised by updating this document, the relevant policy/specification, the machine-readable configuration when applicable, and the decision record in the same commit.
 
